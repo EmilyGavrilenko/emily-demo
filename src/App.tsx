@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, type FormEvent } from 'react'
 import './App.css'
 
 interface Attraction {
@@ -7,6 +7,20 @@ interface Attraction {
   category: string
   description: string
   image: string
+}
+
+function loadUserAttractions(): Attraction[] {
+  try {
+    const stored = localStorage.getItem('sp-user-attractions')
+    if (stored) return JSON.parse(stored)
+  } catch { /* localStorage unavailable */ }
+  return []
+}
+
+function saveUserAttractions(attractions: Attraction[]) {
+  try {
+    localStorage.setItem('sp-user-attractions', JSON.stringify(attractions))
+  } catch { /* localStorage unavailable */ }
 }
 
 const ATTRACTIONS: Attraction[] = [
@@ -183,19 +197,47 @@ function loadVotes(): VoteState {
   try {
     const stored = localStorage.getItem('sp-votes')
     if (stored) return JSON.parse(stored)
-  } catch {}
+  } catch { /* localStorage unavailable */ }
   return {}
 }
 
 function saveVotes(votes: VoteState) {
   try {
     localStorage.setItem('sp-votes', JSON.stringify(votes))
-  } catch {}
+  } catch { /* localStorage unavailable */ }
 }
 
 function App() {
   const [votes, setVotes] = useState<VoteState>(loadVotes)
   const [sortMode, setSortMode] = useState<SortMode>('top')
+  const [userAttractions, setUserAttractions] = useState<Attraction[]>(loadUserAttractions)
+  const [showPublishForm, setShowPublishForm] = useState(false)
+  const [formName, setFormName] = useState('')
+  const [formDescription, setFormDescription] = useState('')
+
+  const allAttractions = [...ATTRACTIONS, ...userAttractions]
+
+  const handlePublish = (e: FormEvent) => {
+    e.preventDefault()
+    const trimmedName = formName.trim()
+    const trimmedDesc = formDescription.trim()
+    if (!trimmedName || !trimmedDesc) return
+
+    const nextId = Math.max(...allAttractions.map((a) => a.id), 0) + 1
+    const newAttraction: Attraction = {
+      id: nextId,
+      name: trimmedName,
+      category: 'Recommendation',
+      description: trimmedDesc,
+      image: `https://images.unsplash.com/photo-1526392060635-9d6019884377?w=400&q=80`,
+    }
+    const updated = [...userAttractions, newAttraction]
+    setUserAttractions(updated)
+    saveUserAttractions(updated)
+    setFormName('')
+    setFormDescription('')
+    setShowPublishForm(false)
+  }
 
   const getScore = useCallback(
     (id: number) => votes[id]?.score ?? 0,
@@ -231,7 +273,7 @@ function App() {
     [],
   )
 
-  const sorted = [...ATTRACTIONS].sort((a, b) => {
+  const sorted = [...allAttractions].sort((a, b) => {
     if (sortMode === 'top') return getScore(b.id) - getScore(a.id)
     if (sortMode === 'new') return b.id - a.id
     return Math.abs(getScore(b.id)) - Math.abs(getScore(a.id))
@@ -275,7 +317,48 @@ function App() {
                   : '⚡ Controversial'}
             </button>
           ))}
+          <button
+            className="sort-btn publish-toggle-btn"
+            onClick={() => setShowPublishForm((v) => !v)}
+          >
+            {showPublishForm ? '✕ Cancel' : '+ Add Recommendation'}
+          </button>
         </div>
+
+        {showPublishForm && (
+          <form className="publish-form" onSubmit={handlePublish}>
+            <h3 className="publish-form-title">Share a Recommendation</h3>
+            <label className="publish-label" htmlFor="pub-name">
+              Name
+            </label>
+            <input
+              id="pub-name"
+              className="publish-input"
+              type="text"
+              placeholder="e.g. Visit the Botanical Garden"
+              value={formName}
+              onChange={(e) => setFormName(e.target.value)}
+              maxLength={120}
+              required
+            />
+            <label className="publish-label" htmlFor="pub-desc">
+              Description
+            </label>
+            <textarea
+              id="pub-desc"
+              className="publish-textarea"
+              placeholder="What makes this a must-do for travelers?"
+              value={formDescription}
+              onChange={(e) => setFormDescription(e.target.value)}
+              maxLength={500}
+              rows={3}
+              required
+            />
+            <button type="submit" className="publish-submit-btn">
+              Publish Recommendation
+            </button>
+          </form>
+        )}
 
         <div className="attractions-list">
           {sorted.map((attraction, index) => {
